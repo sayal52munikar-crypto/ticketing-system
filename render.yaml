@@ -1,0 +1,31 @@
+# Render Blueprint: creates the web app and a PostgreSQL database together.
+# In the Render dashboard: New → Blueprint → pick this GitHub repo → Apply.
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: ticketing-system
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    # On every start: apply new migrations, seed a small dataset if the database is empty,
+    # then start the server. (The free plan has no pre-deploy step, so this runs at start.)
+    startCommand: npm run start:production
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ticketing-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true      # Render creates a random secret
+      - key: SEED_SCALE
+        value: "0.1"             # ~100k tickets, ~41 MB: fits the free 1 GB database
+
+databases:
+  - name: ticketing-db
+    plan: free
+    databaseName: ticketing
+    postgresMajorVersion: "17"

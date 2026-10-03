@@ -4,6 +4,7 @@
 //
 // Usage:  npm run seed                     full size (~1M tickets, 100k customers)
 //         SEED_SCALE=0.1 npm run seed      10% size (~100k tickets), e.g. for a free hosting plan
+//         node db/seeds/run.js --if-empty  seed only if the database has no venues yet
 //
 // Everything runs in ONE transaction. If any step fails, ROLLBACK undoes all of it,
 // so the database is never left half-seeded.
@@ -28,6 +29,17 @@ async function main() {
     ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
   });
   await client.connect();
+
+  // --if-empty: only seed a brand-new database (used when the app starts on Render).
+  // Without this check, every restart would wipe the database and reseed it.
+  if (process.argv.includes('--if-empty')) {
+    const { rows } = await client.query('SELECT EXISTS (SELECT 1 FROM venues) AS has_data');
+    if (rows[0].has_data) {
+      console.log('Database already has data; not seeding.');
+      await client.end();
+      return;
+    }
+  }
 
   const steps = fs.readdirSync(__dirname).filter((f) => /^\d\d_.+\.(sql|js)$/.test(f)).sort();
   const startedAll = Date.now();
