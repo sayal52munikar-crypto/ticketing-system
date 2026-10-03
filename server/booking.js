@@ -74,8 +74,11 @@ async function holdSeat(customerId, eventId, seatId) {
 }
 
 // Pay for the customer's pending order (simulated). declined = true records a failed attempt.
+// card = { brand, last4 } is saved with the payment (never the full number or CVC); optional.
 // Returns { paid, total } | { declined: true } | { error: 'message' }.
-async function payForOrder(customerId, { declined = false } = {}) {
+async function payForOrder(customerId, { declined = false, card = null } = {}) {
+  const brand = card ? card.brand : null;
+  const last4 = card ? card.last4 : null;
   return withTransaction(async (client) => {
     // Lock the order so a double-click (two "Pay" requests) can't pay twice:
     // the second request waits here, then finds the order is no longer pending.
@@ -111,15 +114,17 @@ async function payForOrder(customerId, { declined = false } = {}) {
     if (declined) {
       // A failed attempt is recorded too. The holds stay, so the customer can try again.
       await client.query(
-        "INSERT INTO payments (order_id, amount, status) VALUES ($1, $2, 'failed')",
-        [orderId, total],
+        `INSERT INTO payments (order_id, amount, status, card_brand, card_last4)
+         VALUES ($1, $2, 'failed', $3, $4)`,
+        [orderId, total, brand, last4],
       );
       return { declined: true };
     }
 
     await client.query(
-      "INSERT INTO payments (order_id, amount, status) VALUES ($1, $2, 'succeeded')",
-      [orderId, total],
+      `INSERT INTO payments (order_id, amount, status, card_brand, card_last4)
+       VALUES ($1, $2, 'succeeded', $3, $4)`,
+      [orderId, total, brand, last4],
     );
     // held -> sold: held_until must be cleared together with the status, or the CHECK
     // constraint tickets_held_until_matches_status (migration 010) rejects the update.

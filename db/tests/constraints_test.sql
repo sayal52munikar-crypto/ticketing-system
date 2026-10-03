@@ -116,6 +116,14 @@ SELECT pg_temp.expect_error('a second successful payment for the same order',
     $q$INSERT INTO payments (order_id, amount, status) SELECT order_id, 50.00, 'succeeded' FROM fx_order$q$);
 SELECT pg_temp.expect_error('payment of 0',
     $q$INSERT INTO payments (order_id, amount, status) SELECT order_id, 0, 'failed' FROM fx_order$q$);
+SELECT pg_temp.expect_ok   ('failed payment with a card brand and last 4 digits',
+    $q$INSERT INTO payments (order_id, amount, status, card_brand, card_last4) SELECT order_id, 50.00, 'failed', 'mastercard', '4444' FROM fx_order$q$);
+SELECT pg_temp.expect_error('unknown card brand',
+    $q$INSERT INTO payments (order_id, amount, status, card_brand, card_last4) SELECT order_id, 50.00, 'failed', 'diners', '1234' FROM fx_order$q$);
+SELECT pg_temp.expect_error('more than 4 card digits stored',
+    $q$INSERT INTO payments (order_id, amount, status, card_brand, card_last4) SELECT order_id, 50.00, 'failed', 'visa', '4242424242424242' FROM fx_order$q$);
+SELECT pg_temp.expect_error('card brand without last 4 digits',
+    $q$INSERT INTO payments (order_id, amount, status, card_brand) SELECT order_id, 50.00, 'failed', 'visa' FROM fx_order$q$);
 
 \echo '--- refunds & audit log'
 CREATE TEMP TABLE fx_ticket AS

@@ -90,10 +90,16 @@ async function main() {
     await page.setViewport({ width: 1280, height: 900 });
 
     await page.goto(`${BASE}/checkout`);
+    // Fill in the Mastercard test card (the page's "click to fill" buttons).
+    await page.click('.test-cards summary');
+    await page.evaluate(() => [...document.querySelectorAll('.fill-card')].find((b) => b.dataset.number.startsWith('5555')).click());
+    await page.evaluate(() => { document.querySelector('.test-cards').removeAttribute('open'); window.scrollTo(0, 0); });
+    await page.setViewport({ width: 1280, height: 1100 });
     await new Promise((r) => setTimeout(r, 1100)); // let the countdown tick once
     await shot(page, 'checkout');
+    await page.setViewport({ width: 1280, height: 900 });
 
-    await Promise.all([page.waitForNavigation(), page.click('button[value=approve]')]);
+    await Promise.all([page.waitForNavigation(), page.click('.card-form button')]);
     await shot(page, 'my-tickets');
 
     const admin = await (await browser.createBrowserContext()).newPage();

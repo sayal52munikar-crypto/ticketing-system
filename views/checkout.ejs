@@ -32,11 +32,57 @@
     </tfoot>
   </table>
 
-  <form method="post" action="/checkout/pay" class="pay">
-    <button name="outcome" value="approve">Pay <%= money(total) %></button>
-    <button name="outcome" value="decline" class="secondary">Simulate a declined card</button>
-  </form>
+  <section id="payment" class="payment-card">
+    <h2>Pay by card</h2>
+    <div class="card-brands" aria-label="Accepted cards">
+      <span class="brand-badge" data-brand="visa">VISA</span>
+      <span class="brand-badge" data-brand="mastercard">Mastercard</span>
+      <span class="brand-badge" data-brand="amex">AMEX</span>
+      <span class="brand-badge" data-brand="discover">DISCOVER</span>
+    </div>
+
+    <p class="flash flash-info">Demo shop: no real money is charged. Use a test card below, and <strong>never enter a real card</strong>.</p>
+
+    <%# autocomplete="off" stops the browser from offering to fill in saved (real) cards. %>
+    <form method="post" action="/checkout/pay" class="card-form" autocomplete="off">
+      <label class="wide">Card number
+        <input type="text" name="card_number" id="card-number" inputmode="numeric" maxlength="23"
+               placeholder="1234 5678 9012 3456" autocomplete="off" required>
+      </label>
+      <label>Expiry (MM/YY)
+        <input type="text" name="card_expiry" id="card-expiry" inputmode="numeric" maxlength="5"
+               placeholder="MM/YY" autocomplete="off" required>
+      </label>
+      <label>Security code
+        <input type="text" name="card_cvc" id="card-cvc" inputmode="numeric" maxlength="4"
+               placeholder="123" autocomplete="off" required>
+      </label>
+      <label class="wide">Name on card
+        <input type="text" name="card_name" id="card-name" placeholder="<%= customer.full_name %>" autocomplete="off" required>
+      </label>
+      <button class="wide">Pay <%= money(total) %></button>
+    </form>
+
+    <details class="test-cards">
+      <summary>Test cards (click one to fill in the form)</summary>
+      <table>
+        <thead><tr><th>Card</th><th>Number</th><th>What happens</th></tr></thead>
+        <tbody>
+          <% testCards.forEach((c) => { %>
+            <tr>
+              <td><%= c.brand %></td>
+              <td><button type="button" class="link fill-card" data-number="<%= c.number %>"><code><%= c.number %></code></button></td>
+              <td><%= c.outcome %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <p class="muted">Any future expiry date works. The security code is 3 digits (4 for American Express).</p>
+    </details>
+  </section>
+
   <script src="/countdown.js"></script>
+  <script src="/card-form.js"></script>
 <% } %>
 
 <%- include('partials/footer') %>

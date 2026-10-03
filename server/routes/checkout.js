@@ -2,6 +2,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const { payForOrder } = require('../booking');
+const { checkCard, TEST_CARD_LIST, BRAND_NAMES } = require('../cards');
 const { flash, requireLogin } = require('../middleware');
 
 const router = express.Router();
@@ -40,6 +41,7 @@ router.get('/checkout', requireLogin, async (req, res) => {
     total: rows.length ? rows[0].order_total : 0,
     // The first hold to expire sets the deadline for paying.
     deadlineMs: rows.length ? Math.min(...rows.map((r) => Number(r.expires_ms))) : null,
+    testCards: TEST_CARD_LIST,
   });
 });
 
@@ -61,20 +63,36 @@ router.post('/checkout/release/:ticketId', requireLogin, async (req, res) => {
 });
 
 router.post('/checkout/pay', requireLogin, async (req, res) => {
-  const declined = req.body.outcome === 'decline';
   const customerId = res.locals.customer.customer_id;
 
-  const outcome = await payForOrder(customerId, { declined });
+  // Check the card first. A typo (bad expiry, wrong CVC length) isn't a payment attempt,
+  // so nothing is written to the database. The card fields are never put back into the page.
+  const card = checkCard({
+    number: req.body.card_number,
+    expiry: req.body.card_expiry,
+    cvc: req.body.card_cvc,
+    name: req.body.card_name,
+  });
+  if (card.error) {
+    flash(req, 'error', card.error);
+    return res.redirect('/checkout#payment');
+  }
+
+  const cardLabel = `${BRAND_NAMES[card.brand]} ending ${card.last4}`;
+  const outcome = await payForOrder(customerId, {
+    declined: !card.approved,
+    card: { brand: card.brand, last4: card.last4 },
+  });
 
   if (outcome.error) {
     flash(req, 'error', outcome.error);
     return res.redirect('/checkout');
   }
   if (outcome.declined) {
-    flash(req, 'error', 'Payment declined (simulated). Your seats are still held. Try again.');
-    return res.redirect('/checkout');
+    flash(req, 'error', `${cardLabel}: ${card.reason} Your seats are still held. Try another card.`);
+    return res.redirect('/checkout#payment');
   }
-  flash(req, 'success', `Paid ${res.locals.money(outcome.total)} for ${outcome.paid} ticket(s). Enjoy the show!`);
+  flash(req, 'success', `Paid ${res.locals.money(outcome.total)} with ${cardLabel} for ${outcome.paid} ticket(s). Enjoy the show!`);
   res.redirect('/my-tickets');
 });
 
