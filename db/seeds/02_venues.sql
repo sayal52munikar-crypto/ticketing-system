@@ -1,5 +1,6 @@
 -- 02_venues.sql
 -- 40 venues in 10 cities, 4-8 sections each, ~100k seats.
+-- With SEED_SCALE below 1 there are fewer venues (at least 4); seed.scale is set by run.js.
 
 -- generate_series(1, 40) produces the numbers 1..40; each becomes one venue.
 -- Name parts are picked by position so all 40 names are distinct.
@@ -15,7 +16,7 @@ SELECT
            'Boston', 'Nashville', 'Denver', 'Atlanta', 'San Francisco'])[(i - 1) % 10 + 1],
     (ARRAY['America/New_York', 'America/Chicago', 'America/Los_Angeles', 'America/Chicago', 'America/Los_Angeles',
            'America/New_York', 'America/Chicago', 'America/Denver', 'America/New_York', 'America/Los_Angeles'])[(i - 1) % 10 + 1]
-FROM generate_series(1, 40) AS i;
+FROM generate_series(1, greatest(4, round(40 * current_setting('seed.scale')::numeric))::int) AS i;
 
 -- Each venue gets 4 to 8 sections. The generate_series can use v.venue_id because
 -- a function in FROM may refer to tables listed before it (an implicit LATERAL join).

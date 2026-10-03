@@ -226,3 +226,33 @@ One customer holding 5 seats at once from 5 tabs → all 5 in one order.
   Fix idea: `SET LOCAL app.user = '...'` in the transaction and read it in the trigger with `current_setting()`.
 - The admin dashboard takes ~0.9 s because it totals 1M tickets on every load. A materialized view,
   refreshed every few minutes, would make it instant.
+
+## Phase 2b: Loading with COPY
+
+The big tables (customers, orders, tickets, payments) are now generated in JavaScript
+(`db/seeds/04_customers.js`, `05_sales.js`) and streamed in with `COPY ... FROM STDIN`.
+
+| | INSERT ... SELECT (before) | COPY (now) |
+|---|---|---|
+| Full seed | 98–135 s | **76 s** |
+| Sales step | 85–109 s | 66 s (orders 10 s, tickets 45 s, payments 11 s) |
+| `SEED_SCALE=0.1` | — | **7 s**, 107k tickets, 41 MB database |
+
+### What I learned
+- **COPY** sends plain CSV lines over one stream; PostgreSQL doesn't parse and plan a statement per row.
+  Constraints, foreign keys, indexes and triggers all still apply.
+- **Where the time goes now:** checking 3 foreign keys and updating 4 indexes for each of 1M tickets.
+  The classic trick for huge loads is: drop indexes (and FKs) → COPY → recreate them, since building an
+  index once is faster than updating it a million times. Not worth it at this size.
+- **COPY can write into `GENERATED ALWAYS` identity columns** (INSERT needs `OVERRIDING SYSTEM VALUE`),
+  but it doesn't move the identity counter, so `setval()` is still needed afterwards.
+- **One connection = one COPY at a time.** Tickets need their orders first (foreign key), so the sales
+  simulation runs three times with the **same random seed**, once per table. A seeded generator
+  (`db/seeds/lib/random.js`) makes the same choices every pass, so the three tables match exactly.
+  Every random draw must happen on every pass, or the passes drift apart.
+- **Money in cents:** totals are added as integers, then formatted as `12.34`. Adding prices as
+  JavaScript floats would produce totals like 183.97999999.
+- **`set_config('seed.scale', '0.1', true)`** creates a custom setting for this transaction that SQL
+  steps read with `current_setting('seed.scale')`. A way to pass a parameter into a plain .sql file.
+- Checked after loading: every paid order's payment equals its ticket total, no ticket's seat is in
+  another venue, no ticket price differs from its section's price (all 0 problems).

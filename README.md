@@ -18,11 +18,16 @@ PostgreSQL enforces the business rules; the web layer (Node.js + Express + EJS) 
    ...
    psql -U postgres -d ticketing -f db/migrations/020_index_orders_pending.sql
    ```
-5. Install dependencies and load the sample data (~1M tickets, 100k customers; takes about 2 minutes).
+5. Install dependencies and load the sample data (~1M tickets, 100k customers; about 75 seconds, loaded with `COPY`).
    **This wipes all existing data first.**
    ```
    npm install
    npm run seed
+   ```
+   For a smaller database (e.g. ~100k tickets in 7 seconds), set `SEED_SCALE` between 0 and 1:
+   ```
+   SEED_SCALE=0.1 npm run seed             # Git Bash / macOS / Linux
+   $env:SEED_SCALE="0.1"; npm run seed     # PowerShell
    ```
 6. Optionally, check that every database rule works:
    ```
