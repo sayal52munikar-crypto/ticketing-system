@@ -12,7 +12,8 @@
     "db:backup": "node db/ops/backup.js",
     "db:restore": "node db/ops/restore.js",
     "migrate": "node db/migrate.js",
-    "start:production": "npm run migrate && node db/seeds/run.js --if-empty && node server/index.js"
+    "start:production": "npm run migrate && node db/seeds/run.js --if-empty && node server/index.js",
+    "screenshots": "node scripts/screenshots.js"
   },
   "keywords": [],
   "author": "",

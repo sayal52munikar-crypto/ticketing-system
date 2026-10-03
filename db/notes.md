@@ -396,3 +396,14 @@ Rehearsed first on the restored copy, then run on the live database.
 Fresh empty database + `npm run start:production` (exactly what Render runs):
 first start applied 23 migrations, seeded at scale 0.1 (48 MB) and started; a restart said
 "up to date" and "not seeding". Login cookie came back `HttpOnly; Secure; SameSite=Lax`.
+
+## Phase 10: README
+
+- Screenshots are taken by a script (`npm run screenshots`): it starts its own server and drives a real
+  browser (Edge, through puppeteer-core) as two demo customers, so the seat map shows every seat state.
+  Rerun it after UI changes instead of taking screenshots by hand.
+- The database diagram is a Mermaid `erDiagram` in the README (GitHub draws it), written from the real
+  catalog (`information_schema.columns`, `pg_constraint`) instead of from memory, and checked by
+  rendering it with Mermaid 11 before committing.
+- Full seed time went from 76 s to ~100 s after migration 022: every one of 1M tickets now gets a
+  `gen_random_uuid()` value and an entry in another unique index. Every index has a write cost.
