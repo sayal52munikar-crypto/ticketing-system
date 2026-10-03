@@ -1,7 +1,7 @@
 -- constraints_test.sql
 -- Tries to break every business rule in migrations 005-013 and reports PASS/FAIL.
 -- Everything runs in one transaction that is rolled back, so no data is left behind.
--- Needs at least one venue, section, seat and event to exist (from earlier tests/seeds).
+-- Creates its own test venue, seats and event, so it works on an empty or fully seeded database.
 --
 -- Run:  psql -U postgres -d ticketing -f db/tests/constraints_test.sql
 
@@ -36,11 +36,26 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
--- Test fixtures, looked up later by these unique values.
+-- Test fixtures: a venue, section, two seats and an event of our own, so the tests
+-- don't depend on (or collide with) whatever data is already in the database.
+INSERT INTO venues (name, address, city) VALUES ('Test Venue', '1 Test St', 'Testville');
+INSERT INTO sections (venue_id, name)
+SELECT venue_id, 'Test Section' FROM venues WHERE name = 'Test Venue' AND city = 'Testville';
+INSERT INTO seats (section_id, row_label, seat_number)
+SELECT section_id, 'A', n FROM sections, generate_series(1, 2) AS n
+WHERE name = 'Test Section' AND venue_id = (SELECT venue_id FROM venues WHERE city = 'Testville');
+INSERT INTO events (venue_id, title, starts_at, ends_at)
+SELECT venue_id, 'Test Event', now() + interval '30 days', now() + interval '30 days 3 hours'
+FROM venues WHERE city = 'Testville';
+
 CREATE TEMP TABLE fx AS
-SELECT (SELECT min(event_id) FROM events)                    AS event_id,
-       (SELECT min(seat_id) FROM seats)                      AS seat_id,
-       (SELECT section_id FROM seats ORDER BY seat_id LIMIT 1) AS section_id;
+SELECT e.event_id, min(st.seat_id) AS seat_id, sc.section_id
+FROM events e
+JOIN sections sc ON sc.venue_id = e.venue_id
+JOIN seats st ON st.section_id = sc.section_id
+WHERE e.title = 'Test Event'
+  AND e.venue_id = (SELECT venue_id FROM venues WHERE city = 'Testville')
+GROUP BY e.event_id, sc.section_id;
 
 INSERT INTO customers (email, full_name) VALUES ('test.ana@example.com', 'Ana Test');
 INSERT INTO orders (customer_id)
