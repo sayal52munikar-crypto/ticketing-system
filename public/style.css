@@ -172,11 +172,23 @@ tr.group-start td { border-top: 2px solid var(--border); }
 .pay { display: flex; flex-wrap: wrap; gap: 12px; }
 
 /* Admin */
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+}
+.chart-card h2 { margin: 0 0 8px; }
+.two-col .chart-card { margin-bottom: 0; }
+.chart-box { position: relative; height: 280px; }
+.chart-box.tall { height: 340px; }
+details { margin-top: 12px; }
+details summary { cursor: pointer; color: var(--accent); }
+details table { margin: 12px 0 0; }
+section.two-col { margin-bottom: 24px; }
 .two-col { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-.bar-cell { width: 30%; }
-.bar { display: block; height: 10px; border-radius: 5px; background: var(--accent); }
 
 @media (max-width: 640px) {
-  .bar-cell { display: none; }
   th, td { padding: 6px 8px; }
 }

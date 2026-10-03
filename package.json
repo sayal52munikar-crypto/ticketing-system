@@ -20,5 +20,8 @@
     "express-session": "^1.19.0",
     "pg": "^8.23.1",
     "pg-copy-streams": "^7.0.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.12.0"
   }
 }
