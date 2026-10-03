@@ -256,3 +256,15 @@ The big tables (customers, orders, tickets, payments) are now generated in JavaS
   steps read with `current_setting('seed.scale')`. A way to pass a parameter into a plain .sql file.
 - Checked after loading: every paid order's payment equals its ticket total, no ticket's seat is in
   another venue, no ticket price differs from its section's price (all 0 problems).
+
+## Phase 4b: Dashboard charts
+
+- The admin page now draws three Chart.js charts: revenue by month (gross/refunds bars + net line),
+  revenue by city, and a sell-through histogram. Exact numbers stay available in tables.
+- Two new query files: `12_revenue_by_city.sql` and `13_sell_through_histogram.sql` (~160 ms each).
+- **`width_bucket(value, 0, 100, 10)`** sorts values into 10 equal buckets in SQL. Joining
+  `generate_series(1, 10)` to the counts keeps empty buckets as 0 instead of dropping them.
+- **Passing data to JavaScript safely:** the numbers go into `<script type="application/json">`,
+  with `<` escaped as `\u003c`, so a title containing `</script>` can't break out and inject HTML.
+- The Chart.js script tag has an `integrity` hash (Subresource Integrity): if the CDN file were
+  ever changed, the browser would refuse to run it.

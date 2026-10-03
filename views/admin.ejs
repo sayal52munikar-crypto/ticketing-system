@@ -2,24 +2,38 @@
 
 <h1>Admin dashboard</h1>
 
-<section>
+<section class="chart-card">
   <h2>Revenue by month</h2>
-  <table class="revenue">
-    <thead>
-      <tr><th>Month</th><th class="num">Gross</th><th class="num">Refunds</th><th class="num">Net</th><th class="bar-cell"></th></tr>
-    </thead>
-    <tbody>
-      <% revenue.forEach((m) => { %>
-        <tr>
-          <td><%= m.month %></td>
-          <td class="num"><%= money(m.gross) %></td>
-          <td class="num"><%= money(m.refunds) %></td>
-          <td class="num"><strong><%= money(m.net) %></strong></td>
-          <td class="bar-cell"><span class="bar" style="width: <%= Math.max(0, (Number(m.net) / maxNet) * 100).toFixed(1) %>%"></span></td>
-        </tr>
-      <% }) %>
-    </tbody>
-  </table>
+  <div class="chart-box tall"><canvas id="revenueChart" aria-label="Gross sales, refunds and net revenue per month"></canvas></div>
+  <details>
+    <summary>Show the numbers</summary>
+    <table>
+      <thead>
+        <tr><th>Month</th><th class="num">Gross</th><th class="num">Refunds</th><th class="num">Net</th></tr>
+      </thead>
+      <tbody>
+        <% revenue.forEach((m) => { %>
+          <tr>
+            <td><%= m.month %></td>
+            <td class="num"><%= money(m.gross) %></td>
+            <td class="num"><%= money(m.refunds) %></td>
+            <td class="num"><strong><%= money(m.net) %></strong></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </details>
+</section>
+
+<section class="two-col">
+  <div class="chart-card">
+    <h2>Revenue by city</h2>
+    <div class="chart-box"><canvas id="cityChart" aria-label="Ticket revenue per city"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <h2>Sell-through of past events</h2>
+    <div class="chart-box"><canvas id="sellThroughChart" aria-label="Number of past events by percentage of seats sold"></canvas></div>
+  </div>
 </section>
 
 <section>
@@ -92,5 +106,11 @@
     </table>
   <% } %>
 </section>
+
+<script type="application/json" id="dashboard-data"><%- chartJson %></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"
+        integrity="sha384-XcdcwHqIPULERb2yDEM4R0XaQKU3YnDsrTmjACBZyfdVVqjh6xQ4/DCMd7XLcA6Y"
+        crossorigin="anonymous"></script>
+<script src="/dashboard.js"></script>
 
 <%- include('partials/footer') %>

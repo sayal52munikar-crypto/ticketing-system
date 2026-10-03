@@ -11,14 +11,25 @@ const router = express.Router();
 const REVENUE_BY_MONTH = loadQuery('08_revenue_by_month.sql');
 const TOP_EVENTS_PER_CITY = loadQuery('10_top_events_per_city.sql');
 const SELL_THROUGH = loadQuery('11_sell_through.sql');
+const REVENUE_BY_CITY = loadQuery('12_revenue_by_city.sql');
+const SELL_THROUGH_HISTOGRAM = loadQuery('13_sell_through_histogram.sql');
+
+// Data for the charts goes into the page as JSON inside a <script type="application/json"> tag.
+// Escaping "<" stops a value like "</script>" in an event title from ending that tag early
+// and injecting HTML (an XSS hole).
+function jsonForScriptTag(value) {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
 
 router.get('/admin', requireAdmin, async (req, res) => {
   // The queries don't depend on each other, so they run at the same time on separate
   // pool connections. Total wait = the slowest query, not the sum of all of them.
-  const [revenue, topEvents, sellThrough, refunds] = await Promise.all([
+  const [revenue, topEvents, sellThrough, revenueByCity, histogram, refunds] = await Promise.all([
     pool.query(REVENUE_BY_MONTH),
     pool.query(TOP_EVENTS_PER_CITY),
     pool.query(SELL_THROUGH),
+    pool.query(REVENUE_BY_CITY),
+    pool.query(SELL_THROUGH_HISTOGRAM),
     // Open refund queue (db/queries/06_open_refunds.sql, uses the partial index from migration 015),
     // joined to show who asked and for which event.
     pool.query(
@@ -41,10 +52,22 @@ router.get('/admin', requireAdmin, async (req, res) => {
 
   const openCount = await pool.query("SELECT count(*)::int AS n FROM refunds WHERE status = 'requested'");
 
+  // pg returns numeric/bigint as strings; charts need numbers.
+  const chartData = {
+    months: revenue.rows.map((r) => r.month),
+    gross: revenue.rows.map((r) => Number(r.gross)),
+    refunds: revenue.rows.map((r) => Number(r.refunds)),
+    net: revenue.rows.map((r) => Number(r.net)),
+    cities: revenueByCity.rows.map((r) => r.city),
+    cityRevenue: revenueByCity.rows.map((r) => Number(r.revenue)),
+    sellThroughRanges: histogram.rows.map((r) => r.range),
+    sellThroughEvents: histogram.rows.map((r) => Number(r.events)),
+  };
+
   res.render('admin', {
     title: 'Admin dashboard',
+    chartJson: jsonForScriptTag(chartData),
     revenue: revenue.rows,
-    maxNet: Math.max(...revenue.rows.map((r) => Number(r.net)), 1),
     topEvents: topEvents.rows,
     bestSellers: sellThrough.rows.slice(0, 10),
     worstSellers: sellThrough.rows.slice(-10).reverse(),
