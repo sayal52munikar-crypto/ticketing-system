@@ -2,7 +2,12 @@
 // pg reads the connection details from DATABASE_URL in .env.
 const { Pool } = require('pg');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// max = how many connections the app may open at once (default 10). The race test raises it
+// so 50 simulated buyers really run at the same time instead of queueing for a connection.
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: Number(process.env.PG_POOL_MAX) || 10,
+});
 
 // Runs fn(client) inside a transaction on ONE connection.
 // pool.query() may use a different connection for every call, so BEGIN and COMMIT

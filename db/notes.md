@@ -268,3 +268,40 @@ The big tables (customers, orders, tickets, payments) are now generated in JavaS
   with `<` escaped as `\u003c`, so a title containing `</script>` can't break out and inject HTML.
 - The Chart.js script tag has an `integrity` hash (Subresource Integrity): if the CDN file were
   ever changed, the browser would refuse to run it.
+
+## Phase 5: Proving two people can never buy the same seat
+
+`npm run test:race` (`db/tests/race_test.js`) calls the same `holdSeat()` / `payForOrder()` functions
+the website uses (`server/booking.js`), with each buyer on their own connection, all started at once.
+
+| Round | Scenario | Result |
+|---|---|---|
+| 1 | 50 buyers race for the last of 10 seats | exactly 1 wins (~250 ms), 49 told "taken", event has exactly 10 sold tickets |
+| 2 | the last seat's hold expired, 49 buyers race | exactly 1 wins; the original holder can't pay any more |
+| 3 | the winner clicks "Pay" twice at once | exactly 1 payment |
+
+Passed 3 runs out of 3.
+
+### The test has to be able to fail
+Dropping `tickets_event_seat_active_unique` and rerunning: **all 50 buyers "got" the last seat and the
+10-seat event had 59 sold tickets**. 7 checks failed. With the index back, everything passes.
+So that one partial unique index is what makes double-booking impossible. Everything else in
+`holdSeat()` is there to give friendly messages and keep the cart consistent.
+
+### What I learned
+- **Let the database be the referee.** "SELECT to check the seat is free, then INSERT" has a gap
+  between the two statements where another buyer can slip in. A unique index has no gap: a second
+  INSERT of the same (event, seat) waits for the first transaction, then fails.
+- **Test the real code path.** Moving the hold/pay logic into `server/booking.js` lets the routes and
+  the test share it, so the test can't pass while the website is broken.
+- **Real concurrency needs real connections.** The pool's default of 10 connections would quietly
+  turn 50 buyers into 5 waves of 10. The test raises `PG_POOL_MAX` and opens all connections first.
+- **The database catches bugs in test code too:** my first version computed an event's start and end
+  with two separate `random()` calls, and `CHECK (ends_at > starts_at)` rejected it.
+
+### By hand: two browser windows
+1. `npm start`, then open the same event in a normal window and a private/incognito window.
+2. Log in as two different emails (e.g. `one@example.com` and `two@example.com`).
+3. Click the same green seat in both windows, as close together as you can.
+4. One window says "Seat held for 10 minutes"; the other says "Sorry, someone else just took that seat."
+   After a refresh, the first window shows the seat blue ("held by you"), the second shows it yellow.
