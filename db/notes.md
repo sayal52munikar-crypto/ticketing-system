@@ -64,3 +64,46 @@
   (Composite foreign key or trigger?)
 - Two events at one venue can overlap in time (8–11 PM and 9–10 PM). Exclusion constraints?
 - Expired holds must be cleared safely under concurrency (`SELECT ... FOR UPDATE`).
+
+## Phase 2: Seed data
+
+Result: 40 venues, 106k seats, 1,000 events, 100k customers, 442k orders,
+1.03M tickets, 463k payments, 20k refunds. `npm run seed` takes about 100 seconds.
+
+### Set-based SQL instead of loops
+- `generate_series(1, 100000)` produces 100k rows in one statement. One `INSERT ... SELECT`
+  is far faster than 100k separate `INSERT`s sent from Node.
+- A function in `FROM` can use columns of tables listed before it (an implicit LATERAL join):
+  `FROM venues v, generate_series(1, 4 + v.venue_id % 5)` gives each venue its own number of sections.
+- Temp tables (`CREATE TEMP TABLE ... AS SELECT`) hold intermediate steps and vanish when the session ends.
+
+### random() gotchas
+- **`ORDER BY random()` reuses its value.** In a query with `ORDER BY random() LIMIT n`, any other
+  `random()` in the select list is treated as the same expression, so it gets the sort value.
+  The lowest values sort first, so every row picked the first array element ('requested').
+  Fix: pick the sample in a subquery, then call `random()` in the outer query.
+- `setseed(0.42)` before using `random()` gives the same sequence each run.
+
+### Bulk loading tricks
+- `GENERATED ALWAYS` identity refuses explicit IDs, but `INSERT ... OVERRIDING SYSTEM VALUE`
+  allows them for bulk loads. Afterwards, `setval(pg_get_serial_sequence('orders', 'order_id'), max)`
+  moves the counter past the highest ID, or the next normal insert would collide.
+- **Data-modifying CTE:** `WITH c AS (INSERT ... RETURNING order_id) INSERT INTO payments SELECT ... FROM c`
+  feeds new IDs straight into a second insert, in one statement.
+- `TRUNCATE ... RESTART IDENTITY` empties tables and resets IDs to 1, far faster than `DELETE`.
+- The whole seed runs in **one transaction**: if any step fails, `ROLLBACK` leaves the
+  database exactly as it was.
+- `ANALYZE` after loading updates the planner's statistics so it plans for 1M rows, not 0.
+
+### Time zones in practice
+- `(date + time '19:30') AT TIME ZONE 'America/Chicago'` turns a local wall-clock time
+  into an exact `timestamptz` moment. Each venue's shows start at 7:30 PM *in its own city*.
+
+### Triggers and historical data
+- The audit trigger stamps rows with `now()`, which is wrong for backfilled history. The seed uses
+  `ALTER TABLE refunds DISABLE TRIGGER refunds_audit`, writes the log rows with the real times,
+  then enables it again. Inside a transaction this is safe: a failure rolls the disable back too.
+
+### Tests must not depend on existing data
+- The constraint test first borrowed "the first event and seat". After seeding, that event already
+  had prices, so a test failed. Tests should create their own fixtures (inside a rolled-back transaction).
