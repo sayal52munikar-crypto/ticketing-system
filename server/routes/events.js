@@ -1,11 +1,10 @@
 // Event page with seat map, and holding a seat for 10 minutes.
 const express = require('express');
-const { pool, withTransaction, PG } = require('../db');
+const { pool } = require('../db');
+const { holdSeat } = require('../booking');
 const { flash, requireLogin } = require('../middleware');
 
 const router = express.Router();
-const MAX_SEATS_PER_ORDER = 8;
-
 // Groups the flat list of seats into sections -> rows -> seats for drawing the map.
 function buildSeatMap(seats) {
   const sections = new Map();
@@ -74,8 +73,7 @@ router.get('/events/:eventId', async (req, res, next) => {
   });
 });
 
-// Hold a seat. This is where concurrency matters: two people can click the same seat
-// at the same moment. All steps run in ONE transaction, so they all happen or none do.
+// Hold a seat. The concurrency-safe logic lives in server/booking.js.
 router.post('/events/:eventId/hold', requireLogin, async (req, res, next) => {
   if (!/^\d+$/.test(req.params.eventId) || !/^\d+$/.test(req.body.seat_id || '')) return next();
   const eventId = req.params.eventId;
@@ -83,70 +81,7 @@ router.post('/events/:eventId/hold', requireLogin, async (req, res, next) => {
   const customerId = res.locals.customer.customer_id;
   const back = `/events/${eventId}#seat-map`;
 
-  let outcome;
-  try {
-    outcome = await withTransaction(async (client) => {
-      // 1. Lock this customer's row. If the same customer clicks two seats at once (two tabs),
-      //    the second transaction waits here, so they can't both create a pending order.
-      await client.query('SELECT 1 FROM customers WHERE customer_id = $1 FOR UPDATE', [customerId]);
-
-      // 2. The seat must be in THIS event's venue and the event must not have started.
-      //    (The schema can't enforce "seat belongs to the event's venue", so the app checks it.)
-      const seat = await client.query(
-        `SELECT p.price
-         FROM events e
-         JOIN sections sc            ON sc.venue_id = e.venue_id
-         JOIN seats s                ON s.section_id = sc.section_id
-         JOIN event_section_prices p ON p.event_id = e.event_id AND p.section_id = sc.section_id
-         WHERE e.event_id = $1 AND s.seat_id = $2 AND e.starts_at > now()`,
-        [eventId, seatId],
-      );
-      if (seat.rowCount === 0) return { error: 'That seat isn\'t available for this event.' };
-
-      // 3. Find this customer's pending order (their "cart"), or start one.
-      let order = await client.query(
-        "SELECT order_id FROM orders WHERE customer_id = $1 AND status = 'pending' FOR UPDATE",
-        [customerId],
-      );
-      if (order.rowCount === 0) {
-        order = await client.query(
-          'INSERT INTO orders (customer_id) VALUES ($1) RETURNING order_id',
-          [customerId],
-        );
-      }
-      const orderId = order.rows[0].order_id;
-
-      const held = await client.query(
-        "SELECT count(*)::int AS n FROM tickets WHERE order_id = $1 AND status = 'held' AND held_until > now()",
-        [orderId],
-      );
-      if (held.rows[0].n >= MAX_SEATS_PER_ORDER) {
-        return { error: `You can hold at most ${MAX_SEATS_PER_ORDER} seats at a time.` };
-      }
-
-      // 4. An expired hold on this seat that the cleanup job hasn't removed yet still counts
-      //    for the unique index, so remove it first.
-      await client.query(
-        "DELETE FROM tickets WHERE event_id = $1 AND seat_id = $2 AND status = 'held' AND held_until <= now()",
-        [eventId, seatId],
-      );
-
-      // 5. Insert the hold. If another customer holds or bought this seat, even one whose
-      //    transaction is still running, the partial unique index tickets_event_seat_active_unique
-      //    makes this INSERT fail (or wait for the other transaction, then fail).
-      //    The database is the referee: no "check first, then insert" race is possible.
-      await client.query(
-        `INSERT INTO tickets (order_id, event_id, seat_id, price, held_until)
-         VALUES ($1, $2, $3, $4, now() + interval '10 minutes')`,
-        [orderId, eventId, seatId, seat.rows[0].price],
-      );
-      return { ok: true };
-    });
-  } catch (err) {
-    if (err.code !== PG.UNIQUE_VIOLATION) throw err;
-    outcome = { error: 'Sorry, someone else just took that seat.' };
-  }
-
+  const outcome = await holdSeat(customerId, eventId, seatId);
   if (outcome.error) flash(req, 'error', outcome.error);
   else flash(req, 'success', 'Seat held for 10 minutes. Go to checkout when you\'re ready.');
   res.redirect(back);
