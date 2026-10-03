@@ -3,7 +3,8 @@
 
 -- generate_series(1, 40) produces the numbers 1..40; each becomes one venue.
 -- Name parts are picked by position so all 40 names are distinct.
-INSERT INTO venues (name, address, city)
+-- The city and time zone arrays are in the same order, so each city gets its own zone.
+INSERT INTO venues (name, address, city, time_zone)
 SELECT
     (ARRAY['Grand', 'Royal', 'Majestic', 'Union', 'Liberty', 'Riverside', 'Harbor', 'Summit'])[(i - 1) % 8 + 1]
         || ' ' ||
@@ -11,7 +12,9 @@ SELECT
     (100 + i * 37) || ' ' ||
     (ARRAY['Main', 'Broadway', 'Market', 'Park', 'Oak', 'Elm', 'Lake', 'Hill'])[(i - 1) % 8 + 1] || ' St',
     (ARRAY['New York', 'Chicago', 'Los Angeles', 'Austin', 'Seattle',
-           'Boston', 'Nashville', 'Denver', 'Atlanta', 'San Francisco'])[(i - 1) % 10 + 1]
+           'Boston', 'Nashville', 'Denver', 'Atlanta', 'San Francisco'])[(i - 1) % 10 + 1],
+    (ARRAY['America/New_York', 'America/Chicago', 'America/Los_Angeles', 'America/Chicago', 'America/Los_Angeles',
+           'America/New_York', 'America/Chicago', 'America/Denver', 'America/New_York', 'America/Los_Angeles'])[(i - 1) % 10 + 1]
 FROM generate_series(1, 40) AS i;
 
 -- Each venue gets 4 to 8 sections. The generate_series can use v.venue_id because
