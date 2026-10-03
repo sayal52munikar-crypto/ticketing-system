@@ -16,7 +16,7 @@ PostgreSQL enforces the business rules; the web layer (Node.js + Express + EJS) 
    ```
    psql -U postgres -d ticketing -f db/migrations/001_create_venues.sql
    ...
-   psql -U postgres -d ticketing -f db/migrations/021_create_release_expired_holds_procedure.sql
+   psql -U postgres -d ticketing -f db/migrations/022_add_ticket_code.sql
    ```
 5. Install dependencies and load the sample data (~1M tickets, 100k customers; about 75 seconds, loaded with `COPY`).
    **This wipes all existing data first.**
@@ -52,6 +52,17 @@ Logging in only needs an email (payments and accounts are simulated). A new emai
 For the admin dashboard, log in as **admin@example.com**.
 
 A background job runs every minute and calls the database procedure `release_expired_holds()` to release seats whose 10-minute hold has expired.
+
+## Backups
+
+```
+npm run db:backup                 # pg_dump -> backups/ticketing-<time>.dump (~28 MB, ~7 s)
+npm run db:restore                # restore the newest backup into "ticketing_restore" and compare it
+npm run db:restore -- --drop-after   # same, then delete the copy
+```
+The restore never touches the live database: it restores into a separate one, then checks row counts,
+indexes, constraints, triggers, procedures, the total of all ticket prices and the next order ID all match.
+`backups/` is git-ignored because dumps contain customer data.
 
 ## Analytics queries
 

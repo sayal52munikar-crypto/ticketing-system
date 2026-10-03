@@ -326,3 +326,44 @@ The Node job is now one line: `CALL release_expired_holds(NULL, NULL)`.
   order with seats left alone (31/31 checks pass).
 
 The refund audit trigger (migration 013) and the My tickets refund button were done in Phases 1 and 4.
+
+## Phase 8: Operations
+
+### Backup and restore
+- `npm run db:backup` runs `pg_dump --format=custom`: 309 MB database → **27.8 MB file in 6.7 s**.
+  Custom format is compressed and lets `pg_restore` restore in parallel or restore just one table.
+- pg_dump reads one consistent snapshot, so the site can keep selling during a backup.
+- `npm run db:restore` restores into a separate `ticketing_restore` database (10.3 s with `--jobs=4`)
+  and compares 19 things with the original: row counts of all 13 tables, 32 indexes, 53 constraints,
+  1 trigger, 2 procedures, the sum of all ticket prices, the next order ID. All matched.
+  **A backup you've never restored is only a hope.**
+- The password goes to pg_dump through `PGPASSWORD`, not the command line, where other programs
+  could read it. `backups/` is git-ignored: dumps contain customer data.
+
+### Adding a column to a 1M-row table without losing data (migration 022, `tickets.ticket_code`)
+Rehearsed first on the restored copy, then run on the live database.
+
+| Step | Lock | Time |
+|---|---|---|
+| ❌ trap: `ADD COLUMN ... NOT NULL DEFAULT gen_random_uuid()` in one go | ACCESS EXCLUSIVE (no reads!), rewrites the table | **5.9 s** frozen |
+| 1. `ADD COLUMN ticket_code uuid` (no default) | brief | 24 ms |
+| 2. `SET DEFAULT gen_random_uuid()` (new rows only) | brief | 21 ms |
+| 3. backfill in batches of 50,000, `COMMIT` after each | only each batch's rows | 37–47 s total |
+| 4. `CHECK (...) NOT VALID` → `VALIDATE` → `SET NOT NULL` | VALIDATE allows reads + writes | 266 ms + 3 ms |
+| 5. `CREATE UNIQUE INDEX CONCURRENTLY` | inserts keep working | 1.5 s |
+
+- **Proof no data was lost:** an md5 checksum of every ticket's original columns
+  (`db/ops/ticket_fingerprint.sql`) was identical before and after, on both the copy and the live DB.
+- **Proof the site kept working:** the 50-buyer race test ran *during* the live backfill and passed;
+  a seat-map query took 13 ms (8 ms normally).
+- **Why it works:**
+  - A volatile default (different value per row) forces a full rewrite. No default, or a constant one, doesn't.
+  - Small committed batches mean short row locks, and a failure only loses the current batch.
+    The migration is safe to re-run.
+  - `NOT VALID` + `VALIDATE` splits "new rows must comply" (instant) from "check old rows"
+    (slow, but under a weak lock), and `SET NOT NULL` then trusts the validated CHECK.
+  - `CONCURRENTLY` builds an index without blocking writes. It can't run inside a transaction,
+    so this migration must be run as plain `psql -f` (no `-1`).
+- **Improvement for a much bigger table:** each batch's `WHERE ticket_code IS NULL LIMIT 50000` re-scans
+  rows already filled, so later batches get slower. Walking `ticket_id` ranges (1–50,000, 50,001–100,000, …)
+  keeps every batch the same speed.
