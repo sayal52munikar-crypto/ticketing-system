@@ -104,6 +104,61 @@ Result: 40 venues, 106k seats, 1,000 events, 100k customers, 442k orders,
   `ALTER TABLE refunds DISABLE TRIGGER refunds_audit`, writes the log rows with the real times,
   then enables it again. Inside a transaction this is safe: a failure rolls the disable back too.
 
-### Tests must not depend on existing data
+### Tests must not depend on existing data (Phase 2)
 - The constraint test first borrowed "the first event and seat". After seeding, that event already
   had prices, so a test failed. Tests should create their own fixtures (inside a rolled-back transaction).
+
+## Phase 3: Queries and indexes
+
+Measured with `npm run explain -- <file>` (EXPLAIN ANALYZE, best of 3) on the seeded data.
+
+| Query | Before | After | What changed |
+|---|---|---|---|
+| 01 upcoming events | 0.13 ms | — | Nothing: 1,000-row table, Seq Scan is fine |
+| 02 seat map | 8.4 ms | — | Already uses the partial unique index (334 ms without it) |
+| 03 customer by email | 0.02 ms | — | Already uses `lower(email)` index (41 ms without `lower()`) |
+| 04 my tickets | 0.2 ms | — | Already uses FK indexes (110 ms without `orders_customer_id_idx`) |
+| 05 expired holds | 100 ms | **0.11 ms** | Partial index (014), ~900x |
+| 06 open refunds | 2.3 ms | **0.044 ms** | Partial index in sort order (015), ~50x |
+| 07 name prefix search | 33 ms | **0.07 ms** | `text_pattern_ops` expression index (016), ~490x |
+| 08 revenue by month | 210 ms | — | No index can help a whole-table total |
+| 09 revenue last 30 days | 93 ms | **7 ms** | Covering partial index → Index Only Scan (017), ~13x |
+| 10 top events per city | 348 ms | **150-175 ms** | Query rewrite (aggregate before join), not an index |
+| 11 sell-through | 175-195 ms | — | Whole-table count, no index helps |
+
+### Reading EXPLAIN ANALYZE
+- Read the plan from the most indented line outwards: the innermost nodes run first.
+- `Seq Scan` = read every row. `Index Scan` = look up rows in the index, then fetch them from the table.
+  `Index Only Scan` = everything needed is in the index; the table isn't touched.
+- `Rows Removed by Filter: 999,654` is the warning sign: the database read a million rows to keep a few.
+- `loops=3` on a Parallel Seq Scan means 3 workers each did a share. `rows=` is per loop.
+- Measure more than once: the first run reads from disk, later ones from memory.
+
+### When an index helps
+- When the query keeps a **small fraction** of a big table (05, 07, 09).
+- When the index order **is** the `ORDER BY` order, a `LIMIT` can stop early, with no sort (06).
+- **Partial index** (`WHERE status = 'held'`): indexes only the rows queries ask for. 16 kB instead of
+  tens of MB, and inserts of other rows don't touch it. The query must repeat the same condition.
+- **Expression index** (`lower(email)`): only used when the query uses the identical expression.
+- **Covering index** (`INCLUDE (amount)`): adds extra columns so the table can be skipped entirely.
+  Needs a recent VACUUM; check for `Heap Fetches: 0`.
+- **LIKE 'abc%'** on a non-C collation needs `text_pattern_ops`. `'%abc'` can't use a B-tree at all.
+
+### When an index doesn't help
+- **Small tables** (01): reading 1,000 rows is faster than an index lookup.
+- **Queries that need most rows** (08, 10, 11): a 31 MB covering index on tickets was simply ignored.
+  Every index also costs disk space and slows down every INSERT/UPDATE on that table.
+- For slow whole-table reports, the next tools are query rewrites and pre-computed summaries
+  (materialized views), not more indexes.
+
+### Query-writing lessons
+- **Aggregate before joining** (10): totalling 1M tickets down to 1,000 events first, then joining,
+  halved the time. Same result.
+- **Fan-out:** joining two "many" tables (payments + refunds, seats + tickets) before summing
+  multiplies rows and inflates totals. Total each side in its own CTE, then join (08, 11).
+- **Window functions:** `rank() OVER (PARTITION BY city ORDER BY revenue DESC)` gives a
+  "top N per group" ranking that `LIMIT` alone can't.
+
+### Testing "what if this index didn't exist?"
+- `BEGIN; DROP INDEX ...; EXPLAIN ANALYZE ...; ROLLBACK;` measures a query without an index,
+  then puts it back as if nothing happened. (Only do this locally: DROP INDEX locks the table.)
