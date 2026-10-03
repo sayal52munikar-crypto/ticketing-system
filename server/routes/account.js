@@ -70,6 +70,7 @@ router.get('/my-tickets', requireLogin, async (req, res) => {
             s.seat_number,
             t.price,
             t.status AS ticket_status,
+            upper(left(t.ticket_code::text, 8)) AS ticket_code,  -- short form of the code from migration 022
             r.status AS refund_status,
             -- A refund can be requested for a sold ticket to a future event with no open/approved refund.
             (t.status = 'sold' AND e.starts_at > now() AND r.refund_id IS NULL) AS can_refund

@@ -16,7 +16,7 @@
             <a href="/events/<%= t.event_id %>"><strong><%= t.title %></strong></a><br>
             <span class="muted"><%= t.starts_local %> · <%= t.venue %>, <%= t.city %></span>
           </td>
-          <td><%= t.section %>, Row <%= t.row_label %>, Seat <%= t.seat_number %></td>
+          <td><%= t.section %>, Row <%= t.row_label %>, Seat <%= t.seat_number %><br><span class="muted">Code <code><%= t.ticket_code %></code></span></td>
           <td class="num"><%= money(t.price) %></td>
           <td>
             <span class="badge badge-<%= t.ticket_status %>"><%= t.ticket_status %></span>

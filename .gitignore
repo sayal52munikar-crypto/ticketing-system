@@ -1,2 +1,4 @@
 node_modules/
 .env
+# Database backups contain customer data: never commit them.
+backups/
