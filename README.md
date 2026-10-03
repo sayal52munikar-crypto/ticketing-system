@@ -16,7 +16,7 @@ PostgreSQL enforces the business rules; the web layer (Node.js + Express + EJS) 
    ```
    psql -U postgres -d ticketing -f db/migrations/001_create_venues.sql
    ...
-   psql -U postgres -d ticketing -f db/migrations/020_index_orders_pending.sql
+   psql -U postgres -d ticketing -f db/migrations/021_create_release_expired_holds_procedure.sql
    ```
 5. Install dependencies and load the sample data (~1M tickets, 100k customers; about 75 seconds, loaded with `COPY`).
    **This wipes all existing data first.**
@@ -51,7 +51,7 @@ PostgreSQL enforces the business rules; the web layer (Node.js + Express + EJS) 
 Logging in only needs an email (payments and accounts are simulated). A new email creates an account.
 For the admin dashboard, log in as **admin@example.com**.
 
-A background job runs every minute to release seats whose 10-minute hold has expired.
+A background job runs every minute and calls the database procedure `release_expired_holds()` to release seats whose 10-minute hold has expired.
 
 ## Analytics queries
 
