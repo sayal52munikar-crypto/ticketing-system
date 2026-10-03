@@ -1,38 +1,16 @@
 // Background job: every minute, release seats whose 10-minute hold has run out,
 // and cancel pending orders that have no seats left.
-const { withTransaction } = require('../db');
+// The work itself is the database procedure release_expired_holds() (migration 021);
+// this file only calls it on a timer.
+const { pool } = require('../db');
 
 const EVERY_MS = 60 * 1000;
 
 async function releaseExpiredHolds() {
-  return withTransaction(async (client) => {
-    // Uses the partial index tickets_held_until_idx (migration 014): ~0.1 ms instead of
-    // scanning 1M tickets. A hold being paid for right now is locked (FOR UPDATE in
-    // checkout); this DELETE waits for it, then skips it, because it's now 'sold'.
-    const released = await client.query(
-      "DELETE FROM tickets WHERE status = 'held' AND held_until < now()",
-    );
-
-    // This must be a SEPARATE statement. Inside one WITH ... DELETE ... UPDATE statement,
-    // every part sees the data as it was BEFORE the statement started, so NOT EXISTS
-    // would still see the tickets just deleted and cancel nothing.
-    //
-    // FOR UPDATE SKIP LOCKED: if a customer is adding a seat to their pending order right
-    // now (their transaction has the order locked), skip that order instead of cancelling it.
-    // orders_pending_idx (migration 020) finds the pending orders without scanning all orders.
-    const cancelled = await client.query(
-      `UPDATE orders SET status = 'cancelled'
-       WHERE order_id IN (
-           SELECT o.order_id
-           FROM orders o
-           WHERE o.status = 'pending'
-             AND NOT EXISTS (SELECT 1 FROM tickets t WHERE t.order_id = o.order_id)
-           FOR UPDATE SKIP LOCKED
-       )`,
-    );
-
-    return { released: released.rowCount, cancelled: cancelled.rowCount };
-  });
+  // CALL runs as one statement in its own transaction, so both steps inside the procedure
+  // succeed or fail together. The OUT parameters come back as one row of results.
+  const { rows } = await pool.query('CALL release_expired_holds(NULL, NULL)');
+  return rows[0];
 }
 
 function startHoldCleanup() {

@@ -138,6 +138,34 @@ SELECT pg_temp.expect_ok   ('hold the same seat again',
     $q$INSERT INTO tickets (order_id, event_id, seat_id, price, held_until)
        SELECT (SELECT order_id FROM fx_order), event_id, seat_id, 50.00, now() + interval '10 minutes' FROM fx$q$);
 
+\echo '--- release_expired_holds() procedure (migration 021)'
+-- A second customer whose only hold (on the fixture's second seat) expired a minute ago.
+INSERT INTO customers (email, full_name) VALUES ('test.slow@example.com', 'Slow Test');
+INSERT INTO orders (customer_id)
+SELECT customer_id FROM customers WHERE email = 'test.slow@example.com';
+CREATE TEMP TABLE fx_slow_order AS
+SELECT o.order_id FROM orders o JOIN customers c USING (customer_id) WHERE c.email = 'test.slow@example.com';
+INSERT INTO tickets (order_id, event_id, seat_id, price, held_until)
+SELECT (SELECT order_id FROM fx_slow_order), event_id, seat_id + 1, 50.00, now() - interval '1 minute' FROM fx;
+
+CREATE FUNCTION pg_temp.expect_true(label text, ok boolean) RETURNS void
+LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE NOTICE '%  %', CASE WHEN ok THEN 'PASS' ELSE 'FAIL' END, label;
+END;
+$$;
+
+CALL release_expired_holds(NULL, NULL);
+
+SELECT pg_temp.expect_true('expired hold was released',
+    NOT EXISTS (SELECT 1 FROM tickets WHERE order_id = (SELECT order_id FROM fx_slow_order)));
+SELECT pg_temp.expect_true('its now-empty pending order was cancelled',
+    (SELECT status FROM orders WHERE order_id = (SELECT order_id FROM fx_slow_order)) = 'cancelled');
+SELECT pg_temp.expect_true('a hold that has not expired was kept',
+    EXISTS (SELECT 1 FROM tickets t, fx WHERE t.event_id = fx.event_id AND t.seat_id = fx.seat_id AND t.status = 'held'));
+SELECT pg_temp.expect_true('an order that still has seats was not cancelled',
+    (SELECT status FROM orders WHERE order_id = (SELECT order_id FROM fx_order)) = 'pending');
+
 \echo '--- audit log rows written by the trigger (expect NULL->requested, requested->approved)'
 \pset tuples_only off
 SELECT old_status, new_status, changed_by

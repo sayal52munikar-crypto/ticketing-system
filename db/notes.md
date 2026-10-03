@@ -305,3 +305,24 @@ So that one partial unique index is what makes double-booking impossible. Everyt
 3. Click the same green seat in both windows, as close together as you can.
 4. One window says "Seat held for 10 minutes"; the other says "Sorry, someone else just took that seat."
    After a refresh, the first window shows the seat blue ("held by you"), the second shows it yellow.
+
+## Phase 7b: The hold-release procedure
+
+`release_expired_holds()` (migration 021) moves the cleanup rule into the database.
+The Node job is now one line: `CALL release_expired_holds(NULL, NULL)`.
+
+- **PROCEDURE vs FUNCTION:** a function is used inside a query (`SELECT f()`) and returns a value.
+  A procedure runs on its own with `CALL`, and (when called outside a transaction) may `COMMIT`
+  part-way through. This one doesn't, because both steps must succeed or fail together.
+- **OUT parameters** return values from a procedure: `CALL release_expired_holds(NULL, NULL)`
+  returns one row, `released | cancelled`. The NULLs are placeholders for the OUT parameters.
+- **`GET DIAGNOSTICS n = ROW_COUNT`** gets how many rows the previous statement changed.
+- **Statement visibility inside PL/pgSQL:** each statement sees what earlier statements in the same
+  transaction did, so step 2's `NOT EXISTS` sees that step 1 deleted the tickets. Inside a single
+  statement (`WITH d AS (DELETE ...) UPDATE ...`) it would not: one statement = one snapshot.
+- **Why in the database:** any client can run it (psql, the app, a scheduler like `pg_cron`), and
+  the rule can't drift between copies of app code.
+- Tested in `constraints_test.sql`: expired hold released, empty order cancelled, live hold kept,
+  order with seats left alone (31/31 checks pass).
+
+The refund audit trigger (migration 013) and the My tickets refund button were done in Phases 1 and 4.
