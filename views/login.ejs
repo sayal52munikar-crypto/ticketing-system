@@ -1,0 +1,19 @@
+<%- include('partials/header') %>
+
+<h1>Log in</h1>
+<p class="muted">No password needed. Logins are simulated. Use an email you've used before, or a new one to create an account.</p>
+
+<% if (error) { %><p class="flash flash-error"><%= error %></p><% } %>
+
+<form method="post" action="/login" class="stack">
+  <input type="hidden" name="next" value="<%= next %>">
+  <label>Email <input type="email" name="email" value="<%= email %>" required autofocus></label>
+  <label>Your name <span class="muted">(only needed for a new account)</span>
+    <input type="text" name="full_name">
+  </label>
+  <button>Continue</button>
+</form>
+
+<p class="muted">Admin dashboard: log in as <code>admin@example.com</code>.</p>
+
+<%- include('partials/footer') %>

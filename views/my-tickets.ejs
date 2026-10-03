@@ -1,0 +1,39 @@
+<%- include('partials/header') %>
+
+<h1>My tickets</h1>
+
+<% if (tickets.length === 0) { %>
+  <p class="muted">You haven't bought any tickets yet. <a href="/">Find an event →</a></p>
+<% } else { %>
+  <table>
+    <thead>
+      <tr><th>Event</th><th>Seat</th><th class="num">Price</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      <% tickets.forEach((t) => { %>
+        <tr class="<%= t.is_past ? 'past' : '' %>">
+          <td>
+            <a href="/events/<%= t.event_id %>"><strong><%= t.title %></strong></a><br>
+            <span class="muted"><%= t.starts_local %> · <%= t.venue %>, <%= t.city %></span>
+          </td>
+          <td><%= t.section %>, Row <%= t.row_label %>, Seat <%= t.seat_number %></td>
+          <td class="num"><%= money(t.price) %></td>
+          <td>
+            <span class="badge badge-<%= t.ticket_status %>"><%= t.ticket_status %></span>
+            <% if (t.refund_status === 'requested') { %><span class="badge badge-held">refund requested</span><% } %>
+          </td>
+          <td>
+            <% if (t.can_refund) { %>
+              <form method="post" action="/my-tickets/<%= t.ticket_id %>/refund" class="inline refund-form">
+                <input type="text" name="reason" placeholder="Reason (optional)" maxlength="200">
+                <button class="secondary">Request refund</button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<%- include('partials/footer') %>

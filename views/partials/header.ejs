@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %> · Event Ticketing</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">🎟 Event Ticketing</a>
+    <nav>
+      <a href="/">Events</a>
+      <% if (customer) { %>
+        <a href="/checkout">Checkout</a>
+        <a href="/my-tickets">My tickets</a>
+        <% if (customer.is_admin) { %><a href="/admin">Admin</a><% } %>
+        <form method="post" action="/logout" class="inline">
+          <button class="link" title="<%= customer.email %>">Log out (<%= customer.full_name %>)</button>
+        </form>
+      <% } else { %>
+        <a href="/login">Log in</a>
+      <% } %>
+    </nav>
+  </header>
+  <main>
+    <% if (flash) { %>
+      <p class="flash flash-<%= flash.type %>"><%= flash.text %></p>
+    <% } %>

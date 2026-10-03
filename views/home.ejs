@@ -1,0 +1,39 @@
+<%- include('partials/header') %>
+
+<h1>Upcoming events</h1>
+
+<form method="get" action="/" class="filters">
+  <label>City
+    <select name="city">
+      <option value="">All cities</option>
+      <% cities.forEach((c) => { %>
+        <option value="<%= c %>" <%= filters.city === c ? 'selected' : '' %>><%= c %></option>
+      <% }) %>
+    </select>
+  </label>
+  <label>From <input type="date" name="from" value="<%= filters.from || '' %>"></label>
+  <label>To <input type="date" name="to" value="<%= filters.to || '' %>"></label>
+  <button>Filter</button>
+  <% if (filters.city || filters.from || filters.to) { %><a href="/">Clear</a><% } %>
+</form>
+
+<% if (events.length === 0) { %>
+  <p class="muted">No upcoming events match those filters.</p>
+<% } else { %>
+  <ul class="event-list">
+    <% events.forEach((e) => { %>
+      <li class="card">
+        <a href="/events/<%= e.event_id %>">
+          <h2><%= e.title %></h2>
+          <p class="muted"><%= e.performers %></p>
+          <p><strong><%= e.starts_local %></strong></p>
+          <p><%= e.venue %>, <%= e.city %></p>
+          <p class="price">From <%= money(e.from_price) %></p>
+        </a>
+      </li>
+    <% }) %>
+  </ul>
+  <% if (events.length === 100) { %><p class="muted">Showing the first 100. Narrow the filters to see more.</p><% } %>
+<% } %>
+
+<%- include('partials/footer') %>
