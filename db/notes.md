@@ -367,3 +367,32 @@ Rehearsed first on the restored copy, then run on the live database.
 - **Improvement for a much bigger table:** each batch's `WHERE ticket_code IS NULL LIMIT 50000` re-scans
   rows already filled, so later batches get slower. Walking `ticket_id` ranges (1–50,000, 50,001–100,000, …)
   keeps every batch the same speed.
+
+## Phase 9: Ready to deploy
+
+### A migration runner (`npm run migrate`, `db/migrate.js`)
+- A `schema_migrations` table records which files have run, so each migration runs exactly once on
+  every database (laptop, Render, a teammate's), and the app can migrate itself when it starts.
+- **Baseline:** my local database had been migrated by hand with psql, so
+  `npm run migrate -- --baseline 022` recorded 001–022 as done without re-running them.
+- Hosts don't have `psql`, so the runner splits each file into statements itself and runs them one by
+  one on ONE connection, the way `psql -f` does. That keeps each file's own `BEGIN/COMMIT`,
+  `CREATE INDEX CONCURRENTLY` and the committing backfill procedure (022) working. Splitting SQL
+  correctly means ignoring `;` inside quotes, comments and `$$ ... $$` function bodies.
+
+### Sessions in PostgreSQL (migration 023)
+- In-memory sessions vanish on every restart, and Render's free plan restarts the app whenever it
+  sleeps. `connect-pg-simple` stores them in a `sessions` table (with an index on `expire`, which it uses
+  to delete old sessions).
+
+### Production settings
+- `SESSION_SECRET` is required in production (the app refuses to start without it).
+- Cookies are `HttpOnly` (page scripts can't read them), `SameSite=Lax` (not sent with form posts from
+  other sites, a basic CSRF defence), and `Secure` (HTTPS only) in production. `trust proxy` lets
+  Express see that Render's proxy received HTTPS.
+- `DATABASE_SSL=true` encrypts the connection when reaching a hosted database over the internet.
+
+### Rehearsed locally
+Fresh empty database + `npm run start:production` (exactly what Render runs):
+first start applied 23 migrations, seeded at scale 0.1 (48 MB) and started; a restart said
+"up to date" and "not seeding". Login cookie came back `HttpOnly; Secure; SameSite=Lax`.

@@ -10,13 +10,16 @@
     "explain": "node db/queries/explain.js",
     "test:race": "node db/tests/race_test.js",
     "db:backup": "node db/ops/backup.js",
-    "db:restore": "node db/ops/restore.js"
+    "db:restore": "node db/ops/restore.js",
+    "migrate": "node db/migrate.js",
+    "start:production": "npm run migrate && node db/seeds/run.js --if-empty && node server/index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "connect-pg-simple": "^10.0.0",
     "dotenv": "^18.0.5",
     "ejs": "^6.0.1",
     "express": "^5.2.1",
@@ -26,5 +29,8 @@
   },
   "devDependencies": {
     "puppeteer-core": "^25.12.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

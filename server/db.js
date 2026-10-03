@@ -4,9 +4,12 @@ const { Pool } = require('pg');
 
 // max = how many connections the app may open at once (default 10). The race test raises it
 // so 50 simulated buyers really run at the same time instead of queueing for a connection.
+// DATABASE_SSL=true encrypts the connection, needed when connecting to a hosted database
+// over the internet (e.g. seeding Render's database from your laptop).
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: Number(process.env.PG_POOL_MAX) || 10,
+  ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
 });
 
 // Runs fn(client) inside a transaction on ONE connection.

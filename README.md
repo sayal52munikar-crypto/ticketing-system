@@ -12,16 +12,15 @@ PostgreSQL enforces the business rules; the web layer (Node.js + Express + EJS) 
    ```
 3. Copy `.env.example` to `.env`, put in your `postgres` password, and set `SESSION_SECRET`
    to any long random string.
-4. Create the tables by running each migration in order:
-   ```
-   psql -U postgres -d ticketing -f db/migrations/001_create_venues.sql
-   ...
-   psql -U postgres -d ticketing -f db/migrations/022_add_ticket_code.sql
-   ```
-5. Install dependencies and load the sample data (~1M tickets, 100k customers; about 75 seconds, loaded with `COPY`).
-   **This wipes all existing data first.**
+4. Install dependencies and create the tables. `npm run migrate` applies every file in
+   `db/migrations/` that hasn't run yet, and records it in the `schema_migrations` table:
    ```
    npm install
+   npm run migrate
+   ```
+5. Load the sample data (~1M tickets, 100k customers, loaded with `COPY`).
+   **This wipes all existing data first.**
+   ```
    npm run seed
    ```
    For a smaller database (e.g. ~100k tickets in 7 seconds), set `SEED_SCALE` between 0 and 1:
@@ -52,6 +51,25 @@ Logging in only needs an email (payments and accounts are simulated). A new emai
 For the admin dashboard, log in as **admin@example.com**.
 
 A background job runs every minute and calls the database procedure `release_expired_holds()` to release seats whose 10-minute hold has expired.
+
+## Deploying to Render (free)
+
+`render.yaml` is a Render Blueprint: it creates the web app **and** a PostgreSQL database.
+
+1. Sign in at [render.com](https://render.com) with your GitHub account.
+2. **New → Blueprint**, pick the `ticketing-system` repository, and click **Apply**.
+3. Wait for the first deploy (a few minutes). On every start the app runs
+   `npm run migrate` → seeds a small dataset **only if the database is empty**
+   (`SEED_SCALE=0.1`: ~100k tickets, ~48 MB) → starts the server.
+4. Open the `https://ticketing-system-….onrender.com` URL Render shows.
+   Log in as `admin@example.com` for the dashboard.
+
+Good to know about the free plan:
+- The app **sleeps after 15 minutes without visitors**; the next visit takes ~1 minute to wake it.
+- The free database **expires after 30 days** (Render emails you first). Take a backup if you want to keep it.
+- Logins are stored in the database (`sessions` table), so they survive restarts.
+- To seed or inspect the hosted database from your laptop, copy its **External Database URL** from Render and run, e.g.
+  `DATABASE_URL="<external url>" DATABASE_SSL=true npm run migrate`.
 
 ## Backups
 
