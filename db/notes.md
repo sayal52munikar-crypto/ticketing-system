@@ -162,3 +162,67 @@ Measured with `npm run explain -- <file>` (EXPLAIN ANALYZE, best of 3) on the se
 ### Testing "what if this index didn't exist?"
 - `BEGIN; DROP INDEX ...; EXPLAIN ANALYZE ...; ROLLBACK;` measures a query without an index,
   then puts it back as if nothing happened. (Only do this locally: DROP INDEX locks the table.)
+
+## Phase 4: The website
+
+### Transactions in the app
+- `pool.query()` may use a different connection for every call, so `BEGIN` and `COMMIT` could land on
+  different connections and do nothing. `withTransaction()` in `server/db.js` checks out ONE client,
+  runs everything between `BEGIN` and `COMMIT` on it, and rolls back if anything throws.
+- After an error inside a transaction, PostgreSQL refuses further statements until `ROLLBACK`.
+  So a unique violation is caught *outside* `withTransaction()`, after the rollback.
+
+### Holding a seat safely (`server/routes/events.js`)
+1. `SELECT ... FROM customers WHERE customer_id = $1 FOR UPDATE` locks the customer's row,
+   so two tabs of the same customer queue up instead of both creating a pending order.
+2. Check the seat is in the event's venue (the schema can't enforce this, so the app does).
+3. Find or create the pending order (the "cart").
+4. Delete an expired hold on that seat, if the cleanup job hasn't yet.
+5. `INSERT` the hold. **The partial unique index is the referee**: if someone else holds the seat,
+   even in a transaction that hasn't committed yet, the INSERT waits for it, then fails.
+   No "check if free, then insert" race is possible.
+
+Tested: 10 customers clicking the same seat at the same instant → exactly 1 got it.
+One customer holding 5 seats at once from 5 tabs → all 5 in one order.
+
+### Paying (`server/routes/checkout.js`)
+- `SELECT ... FROM orders ... FOR UPDATE` → two "Pay" clicks at once: the second waits, then finds the
+  order is no longer pending. Tested: 1 payment, no double charge.
+- `SELECT ... FROM tickets ... FOR UPDATE` on the live holds: until the payment commits, the cleanup job
+  can't delete them, even if they expire mid-payment.
+- `FOR UPDATE` can't be combined with aggregates like `sum()`; lock first, total in a second query.
+- held → sold must also clear `held_until`, or the CHECK constraint from migration 010 rejects it.
+
+### The cleanup job (`server/jobs/releaseExpiredHolds.js`)
+- **All parts of one statement see the same snapshot.** In `WITH d AS (DELETE ...) UPDATE ... WHERE NOT EXISTS (tickets)`,
+  the NOT EXISTS still sees the tickets being deleted. So the DELETE and the UPDATE are separate statements.
+- `FOR UPDATE SKIP LOCKED`: skip a pending order another transaction has locked (someone adding a
+  seat right now) instead of waiting for it or cancelling it.
+
+### Security in the SQL
+- **Always `$1` parameters**, never values pasted into the SQL string, so typed text can't change the query.
+- **Ownership checks in the WHERE clause**: `INSERT INTO refunds ... SELECT ... WHERE t.ticket_id = $1 AND o.customer_id = $2`.
+  Without `o.customer_id = $2`, changing the number in the URL would refund someone else's ticket. Tested.
+- **Let constraints validate**: a bad email is rejected by the `customers_email_format` CHECK; the app
+  just turns error code 23514 into a friendly message.
+- `UPDATE refunds ... WHERE refund_id = $1 AND status = 'requested'`: the condition makes a decision
+  one-time, so two admins clicking at once can't both approve.
+
+### Schema changes found while building pages
+- **Time zones:** to show "7:30 PM" for a New York show, the venue's time zone must be stored (migration 018).
+  `to_char(e.starts_at AT TIME ZONE v.time_zone, ...)` formats it in local time.
+- **Adding a NOT NULL column to a table with data:** add it nullable → fill it → `SET NOT NULL`, in one transaction.
+- **A NOT NULL column with a constant DEFAULT** (migration 019, `is_admin`) is instant even on big tables:
+  PostgreSQL stores the default once instead of rewriting rows.
+
+### SQL tricks used in the pages
+- `sum(t.price) OVER ()`: the order total on every row, without collapsing rows like GROUP BY.
+- `$1::text IS NULL OR v.city = $1`: an optional filter in one query.
+- `DELETE ... USING orders o WHERE ...`: a DELETE that joins to another table (to check ownership).
+- The admin page loads its SQL straight from `db/queries/` files, so the measured queries are the ones that run.
+
+### Still open
+- `refund_audit_log.changed_by` always says `postgres` (the database user), not which admin clicked.
+  Fix idea: `SET LOCAL app.user = '...'` in the transaction and read it in the trigger with `current_setting()`.
+- The admin dashboard takes ~0.9 s because it totals 1M tickets on every load. A materialized view,
+  refreshed every few minutes, would make it instant.

@@ -1,0 +1,42 @@
+<%- include('partials/header') %>
+
+<h1>Checkout</h1>
+
+<% if (tickets.length === 0) { %>
+  <p class="muted">You aren't holding any seats. <a href="/">Find an event →</a></p>
+<% } else { %>
+  <p class="countdown" data-deadline="<%= deadlineMs %>">
+    Seats held for <strong class="countdown-time">--:--</strong>
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Event</th><th>Seat</th><th class="num">Price</th><th></th></tr>
+    </thead>
+    <tbody>
+      <% tickets.forEach((t) => { %>
+        <tr>
+          <td><strong><%= t.title %></strong><br><span class="muted"><%= t.starts_local %> · <%= t.venue %></span></td>
+          <td><%= t.section %>, Row <%= t.row_label %>, Seat <%= t.seat_number %></td>
+          <td class="num"><%= money(t.price) %></td>
+          <td>
+            <form method="post" action="/checkout/release/<%= t.ticket_id %>" class="inline">
+              <button class="link">Release</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+    <tfoot>
+      <tr><th colspan="2">Total</th><th class="num"><%= money(total) %></th><th></th></tr>
+    </tfoot>
+  </table>
+
+  <form method="post" action="/checkout/pay" class="pay">
+    <button name="outcome" value="approve">Pay <%= money(total) %></button>
+    <button name="outcome" value="decline" class="secondary">Simulate a declined card</button>
+  </form>
+  <script src="/countdown.js"></script>
+<% } %>
+
+<%- include('partials/footer') %>

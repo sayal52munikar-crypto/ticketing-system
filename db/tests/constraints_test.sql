@@ -38,7 +38,7 @@ $$;
 
 -- Test fixtures: a venue, section, two seats and an event of our own, so the tests
 -- don't depend on (or collide with) whatever data is already in the database.
-INSERT INTO venues (name, address, city) VALUES ('Test Venue', '1 Test St', 'Testville');
+INSERT INTO venues (name, address, city, time_zone) VALUES ('Test Venue', '1 Test St', 'Testville', 'UTC');
 INSERT INTO sections (venue_id, name)
 SELECT venue_id, 'Test Section' FROM venues WHERE name = 'Test Venue' AND city = 'Testville';
 INSERT INTO seats (section_id, row_label, seat_number)

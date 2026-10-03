@@ -32,22 +32,14 @@ FROM w, generate_series(1, 2000) AS i;
 -- so the UNIQUE (venue_id, starts_at) rule is never broken.
 -- Shows start at 7:30 PM *local time*: "date + time AT TIME ZONE zone" converts a
 -- wall-clock time in that city into an exact timestamptz moment.
-WITH city_zone (city, zone) AS (
-    VALUES ('New York', 'America/New_York'), ('Boston', 'America/New_York'),
-           ('Atlanta', 'America/New_York'), ('Chicago', 'America/Chicago'),
-           ('Austin', 'America/Chicago'), ('Nashville', 'America/Chicago'),
-           ('Denver', 'America/Denver'), ('Los Angeles', 'America/Los_Angeles'),
-           ('Seattle', 'America/Los_Angeles'), ('San Francisco', 'America/Los_Angeles')
-),
-slots AS (
-    SELECT v.venue_id, cz.zone,
+WITH slots AS (
+    SELECT v.venue_id, v.time_zone AS zone,
            current_date - 540 + (k - 1) * 28 + floor(random() * 21)::int AS show_date,
            (ARRAY['Midnight', 'Summer', 'Electric', 'Homecoming', 'Farewell', 'Golden Hour',
                   'Unplugged', 'Neon Nights', 'Wildfire', 'After Dark'])[1 + floor(random() * 10)::int]
            || ' ' ||
            (ARRAY['Tour', 'Live', 'Sessions', 'Revue', 'Festival', 'Show'])[1 + floor(random() * 6)::int] AS title
-    FROM venues v
-    JOIN city_zone cz ON cz.city = v.city,
+    FROM venues v,
     generate_series(1, 25) AS k
 )
 INSERT INTO events (venue_id, title, starts_at, ends_at)

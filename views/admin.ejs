@@ -1,0 +1,96 @@
+<%- include('partials/header') %>
+
+<h1>Admin dashboard</h1>
+
+<section>
+  <h2>Revenue by month</h2>
+  <table class="revenue">
+    <thead>
+      <tr><th>Month</th><th class="num">Gross</th><th class="num">Refunds</th><th class="num">Net</th><th class="bar-cell"></th></tr>
+    </thead>
+    <tbody>
+      <% revenue.forEach((m) => { %>
+        <tr>
+          <td><%= m.month %></td>
+          <td class="num"><%= money(m.gross) %></td>
+          <td class="num"><%= money(m.refunds) %></td>
+          <td class="num"><strong><%= money(m.net) %></strong></td>
+          <td class="bar-cell"><span class="bar" style="width: <%= Math.max(0, (Number(m.net) / maxNet) * 100).toFixed(1) %>%"></span></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Top 3 events per city</h2>
+  <table>
+    <thead>
+      <tr><th>City</th><th>#</th><th>Event</th><th class="num">Tickets</th><th class="num">Revenue</th></tr>
+    </thead>
+    <tbody>
+      <% topEvents.forEach((e) => { %>
+        <tr class="<%= e.rank_in_city === '1' ? 'group-start' : '' %>">
+          <td><%= e.rank_in_city === '1' ? e.city : '' %></td>
+          <td><%= e.rank_in_city %></td>
+          <td><%= e.title %></td>
+          <td class="num"><%= Number(e.tickets_sold).toLocaleString('en-US') %></td>
+          <td class="num"><%= money(e.revenue) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</section>
+
+<section class="two-col">
+  <% [['Best sell-through', bestSellers], ['Worst sell-through', worstSellers]].forEach(([heading, list]) => { %>
+    <div>
+      <h2><%= heading %> <span class="muted">(past events)</span></h2>
+      <table>
+        <thead><tr><th>Event</th><th>City</th><th class="num">Sold</th><th class="num">%</th></tr></thead>
+        <tbody>
+          <% list.forEach((e) => { %>
+            <tr>
+              <td><%= e.title %></td>
+              <td><%= e.city %></td>
+              <td class="num"><%= e.tickets_sold %> / <%= e.capacity %></td>
+              <td class="num"><%= e.sell_through_pct %>%</td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% }) %>
+</section>
+
+<section id="refunds">
+  <h2>Open refund requests <span class="muted">(<%= openRefunds.toLocaleString('en-US') %> waiting, oldest first)</span></h2>
+  <% if (refunds.length === 0) { %>
+    <p class="muted">No open requests.</p>
+  <% } else { %>
+    <table>
+      <thead>
+        <tr><th>Requested</th><th>Customer</th><th>Ticket</th><th>Reason</th><th class="num">Amount</th><th></th></tr>
+      </thead>
+      <tbody>
+        <% refunds.forEach((r) => { %>
+          <tr>
+            <td><%= r.requested %></td>
+            <td><%= r.full_name %><br><span class="muted"><%= r.email %></span></td>
+            <td><%= r.title %><br><span class="muted"><%= r.section %>, Row <%= r.row_label %>, Seat <%= r.seat_number %></span></td>
+            <td><%= r.reason || '—' %></td>
+            <td class="num"><%= money(r.amount) %></td>
+            <td class="actions">
+              <form method="post" action="/admin/refunds/<%= r.refund_id %>" class="inline">
+                <button name="decision" value="approved">Approve</button>
+                <button name="decision" value="rejected" class="secondary">Reject</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

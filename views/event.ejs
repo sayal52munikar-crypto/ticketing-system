@@ -1,0 +1,43 @@
+<%- include('partials/header') %>
+
+<p><a href="/">← All events</a></p>
+<h1><%= event.title %></h1>
+<p class="muted"><%= event.performers %></p>
+<p><strong><%= event.starts_local %></strong> · <%= event.venue %>, <%= event.address %>, <%= event.city %></p>
+
+<% if (event.has_started) { %>
+  <p class="flash flash-info">This event has already started. Tickets are no longer on sale.</p>
+<% } else if (!customer) { %>
+  <p class="flash flash-info"><a href="/login?next=/events/<%= event.event_id %>">Log in</a> to pick seats.</p>
+<% } else if (myHolds > 0) { %>
+  <p class="flash flash-success">You're holding <%= myHolds %> seat(s) here. <a href="/checkout">Go to checkout →</a></p>
+<% } %>
+
+<div class="legend">
+  <span><i class="seat available"></i> Available</span>
+  <span><i class="seat mine"></i> Held by you</span>
+  <span><i class="seat held"></i> Held by someone else</span>
+  <span><i class="seat sold"></i> Sold</span>
+</div>
+
+<% const canPick = customer && !event.has_started; %>
+<form id="seat-map" method="post" action="/events/<%= event.event_id %>/hold" class="seat-map">
+  <% sections.forEach((section) => { %>
+    <section class="map-section">
+      <h2><%= section.name %> <span class="muted">· <%= money(section.price) %> · <%= section.available %> available</span></h2>
+      <% section.rows.forEach(([rowLabel, seats]) => { %>
+        <div class="seat-row">
+          <span class="row-label"><%= rowLabel %></span>
+          <% seats.forEach((s) => { %>
+            <button name="seat_id" value="<%= s.seat_id %>"
+                    class="seat <%= s.seat_status %>"
+                    title="<%= section.name %>, Row <%= rowLabel %>, Seat <%= s.seat_number %> · <%= money(s.price) %> · <%= s.seat_status %>"
+                    <%= canPick && s.seat_status === 'available' ? '' : 'disabled' %>></button>
+          <% }) %>
+        </div>
+      <% }) %>
+    </section>
+  <% }) %>
+</form>
+
+<%- include('partials/footer') %>
