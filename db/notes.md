@@ -407,3 +407,18 @@ first start applied 23 migrations, seeded at scale 0.1 (48 MB) and started; a re
   rendering it with Mermaid 11 before committing.
 - Full seed time went from 76 s to ~100 s after migration 022: every one of 1M tickets now gets a
   `gen_random_uuid()` value and an entry in another unique index. Every index has a write cost.
+
+## Extra: Card payments (simulated)
+
+- Checkout now takes a card: Visa, Mastercard, American Express or Discover. Payments are still simulated
+  (CLAUDE.md), so **only listed test card numbers are accepted**: a real-looking number is refused,
+  so nobody types a real card into a site that doesn't need one.
+- **Store as little as possible:** `payments` gets only `card_brand` and `card_last4` (migration 024).
+  The full number and the CVC are checked in `server/cards.js` and then dropped: never stored, logged
+  or sent back to the page. Card security rules (PCI DSS) forbid keeping the CVC at all.
+- The database enforces it too: `CHECK (card_last4 ~ '^[0-9]{4}$')` makes storing a full number
+  impossible, a brand list CHECK, and `(card_brand IS NULL) = (card_last4 IS NULL)` (both or neither).
+- A failed card is recorded as a `failed` payment with its brand and last 4, so declined attempts show
+  which card was used. A typo (bad expiry, wrong CVC length) is not a payment attempt and writes nothing.
+- The brand is recognised from the first digits (the card network's number range): 4 = Visa,
+  51–55 / 2221–2720 = Mastercard, 34/37 = Amex, 6011/65 = Discover. Amex has 15 digits (4-6-5) and a 4-digit code.

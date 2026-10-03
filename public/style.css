@@ -171,6 +171,32 @@ tr.group-start td { border-top: 2px solid var(--border); }
 .countdown.urgent { color: var(--error-text); }
 .pay { display: flex; flex-wrap: wrap; gap: 12px; }
 
+/* Card payment */
+.payment-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  max-width: 560px;
+}
+.payment-card h2 { margin: 0 0 12px; }
+.card-brands { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.brand-badge {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+.brand-badge.active { border-color: var(--accent); color: var(--accent); background: var(--info-bg); }
+.card-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.card-form label { display: grid; gap: 4px; font-size: 0.9rem; }
+.card-form .wide { grid-column: 1 / -1; }
+.test-cards { margin-top: 16px; }
+.test-cards table { margin-top: 8px; }
+
 /* Admin */
 .chart-card {
   background: var(--surface);
