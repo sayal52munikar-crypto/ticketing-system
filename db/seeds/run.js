@@ -1,9 +1,13 @@
-// Seeds the database: runs every .sql file in this folder in name order.
-// Usage: npm run seed
+// Seeds the database: runs every numbered step in this folder in name order.
+//   NN_name.sql -> run as SQL
+//   NN_name.js  -> a function(client, { scale, now }) that loads data with COPY
 //
-// Everything runs in ONE transaction. If any file fails, ROLLBACK undoes all of it,
+// Usage:  npm run seed                     full size (~1M tickets, 100k customers)
+//         SEED_SCALE=0.1 npm run seed      10% size (~100k tickets), e.g. for a free hosting plan
+//
+// Everything runs in ONE transaction. If any step fails, ROLLBACK undoes all of it,
 // so the database is never left half-seeded.
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 const fs = require('fs');
 const path = require('path');
@@ -16,21 +20,38 @@ const TABLES = [
 ];
 
 async function main() {
-  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  const scale = Number(process.env.SEED_SCALE || 1);
+  if (!(scale > 0 && scale <= 1)) throw new Error('SEED_SCALE must be a number between 0 and 1');
+
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+  });
   await client.connect();
 
-  const files = fs.readdirSync(__dirname).filter((f) => f.endsWith('.sql')).sort();
+  const steps = fs.readdirSync(__dirname).filter((f) => /^\d\d_.+\.(sql|js)$/.test(f)).sort();
   const startedAll = Date.now();
+  console.log(`Seeding at scale ${scale}`);
 
   try {
     await client.query('BEGIN');
-    // Fixes the starting point of random(), so each run generates similar data.
+    // Fixes the starting point of SQL random(), so each run generates similar data.
     await client.query('SELECT setseed(0.42)');
+    // A custom setting the SQL steps can read with current_setting('seed.scale').
+    // "true" = local to this transaction.
+    await client.query("SELECT set_config('seed.scale', $1, true)", [String(scale)]);
+    const context = { scale, now: Date.now() };
 
-    for (const file of files) {
+    for (const step of steps) {
       const started = Date.now();
-      await client.query(fs.readFileSync(path.join(__dirname, file), 'utf8'));
-      console.log(`${file.padEnd(20)} ${((Date.now() - started) / 1000).toFixed(1)}s`);
+      let detail = '';
+      if (step.endsWith('.sql')) {
+        await client.query(fs.readFileSync(path.join(__dirname, step), 'utf8'));
+      } else {
+        detail = await require(path.join(__dirname, step))(client, context);
+      }
+      const seconds = ((Date.now() - started) / 1000).toFixed(1);
+      console.log(`${step.padEnd(20)} ${seconds.padStart(6)}s  ${detail || ''}`);
     }
 
     await client.query('COMMIT');

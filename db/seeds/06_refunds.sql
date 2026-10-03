@@ -1,5 +1,5 @@
 -- 06_refunds.sql
--- 20,000 refund requests on random sold tickets: ~20% still open, ~60% approved, ~20% rejected.
+-- 20,000 refund requests (times SEED_SCALE) on random sold tickets: ~20% still open, ~60% approved, ~20% rejected.
 --
 -- The audit trigger is switched off while loading history. Left on, it would stamp every
 -- log row with the time the seed ran instead of when each request was made and decided.
@@ -24,7 +24,7 @@ FROM (
     FROM tickets
     WHERE status = 'sold'
     ORDER BY random()
-    LIMIT 20000
+    LIMIT round(20000 * current_setting('seed.scale')::numeric)
 ) AS t;
 
 INSERT INTO refunds (ticket_id, status, amount, reason, requested_at, decided_at)
